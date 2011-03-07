@@ -16,10 +16,12 @@ http://groups.google.com/group/compass-users/browse_thread/thread/daf55acda03656
 """
 
 
-import time
-import os, subprocess
+import os
 from os import path
+import shutil
+import subprocess
 import tempfile
+import time
 
 from webassets.filter import Filter
 
@@ -73,29 +75,22 @@ class CompassFilter(Filter):
         As a result, we need to set both the --sass-dir and --css-dir
         options properly, so we can "guess" the final css filename.
         """
-        sasspath = tempfile.mkdtemp()
-        sassname = path.join(sasspath, 'in' + path.splitext(source_path)[1])
-
-        # Write the incoming stream to the temporary sass directory.
-        f = open(sassname, 'wb')
-        try:
-            f.write(_in.read())
-            f.flush()
-        finally:
-            f.close()
+        sassdir = os.path.dirname(source_path)
+        cssdir = tempfile.mkdtemp()
 
         command = [self.compass, 'compile']
         for plugin in self.plugins:
             command.extend(('--require', plugin))
-        command.extend(['--sass-dir', sasspath,
-                        '--css-dir', sasspath,
-                        '--image-dir', self.env.url[1:],
+        command.extend(['--sass-dir', sassdir,
+                        '--css-dir', cssdir,
                         '--quiet',
                         '--boring',
                         '--output-style', 'expanded',
-                        sassname])
+                        source_path])
 
         proc = subprocess.Popen(command,
+                                # Allow compass to use a config.rb, if any.
+                                cwd=sassdir,
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 # shell: necessary on windows to execute
@@ -111,8 +106,11 @@ class CompassFilter(Filter):
                                             stderr, stdout, proc.returncode))
 
 
-        f = open("%s.css" % path.splitext(sassname)[0])
+        f = open("%s/%s.css" % (
+            cssdir, path.splitext(path.basename(source_path))[0]))
         try:
             out.write(f.read())
         finally:
             f.close()
+
+        shutil.rmtree(cssdir)
